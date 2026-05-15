@@ -32,10 +32,8 @@ const submitSurvey = () => {
 
 const reviews = [
 	{ image: '/img/review1.png' },
-	{ image: '/img/review2.png' },
-	{ image: '/img/review1.png' },
-	{ image: '/img/review2.png' },
-
+	{ image: '/img/review3.png' },
+	{ image: '/img/review4.png' },
 ]
 
 const changeSlide = (index) => {

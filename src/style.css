@@ -29458,16 +29458,15 @@ button:hover {
 }
 
 .review-section {
-	margin-top: 35px;
-	padding: 20px;
+	padding: 16px;
 	background: #f5f6fa;
-	border-radius: 12px;
+	border-radius: 16px;
 	overflow: hidden;
 }
 
 .review-list {
 	display: flex;
-	gap: 16px;
+	gap: 14px;
 	overflow-x: auto;
 	scroll-snap-type: x mandatory;
 	scroll-behavior: smooth;
@@ -29482,36 +29481,56 @@ button:hover {
 }
 
 .review-item {
-	flex: 0 0 90%;
+	flex: 0 0 100%;
 	scroll-snap-align: center;
+	display: flex;
+	justify-content: center;
 }
 
 .review-banner {
-	width: 100%;
+	width: 584px;
+	height: 302px;
+	object-fit: cover;
+
 	display: block;
-	border-radius: 16px;
+	border-radius: 22px;
+
+	box-shadow:
+		0 8px 20px rgba(0,0,0,.08);
+
+	background: white;
 }
 
 .slider-dots {
 	display: flex;
 	justify-content: center;
+	align-items: center;
 	gap: 8px;
-	margin-top: 12px;
+	margin-top: 14px;
 }
 
 .dot {
 	width: 12px;
 	height: 12px;
-	border-radius: 50px;
+	border-radius: 999px;
 	background: #d9d9d9;
-	transition: all .3s ease;
+	transition: .3s;
 	cursor: pointer;
 }
 
 .dot.active {
-	width: 26px;
+	width: 28px;
 	background: #ff379b;
 }
 .luu{
 	color: #ff379b;
+}
+@media (max-width: 768px) {
+
+	.review-banner {
+		width: 100%;
+		height: auto;
+		/* aspect-ratio: 584 / 302; */
+	}
+
 }
