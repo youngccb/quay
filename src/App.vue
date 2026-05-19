@@ -69,12 +69,42 @@ onMounted(() => {
 	})
 })
 const prizes = [
-	{ id: 1, name: 'Xe ô tô điện', color: '#ffffff', image: '/img/xeoto.png' },
-	{ id: 2, name: 'Chúc bạn may mắn lần sau', color: '#ef3f3f' },
-	{ id: 3, name: 'Xe chòi chân', color: '#ffffff', image: '/img/xechoi.png' },
-	{ id: 4, name: 'Chúc bạn may mắn lần sau', color: '#ef3f3f' },
-	{ id: 5, name: 'Xe đạp', color: '#ffffff', image: '/img/xedap.png' },
-	{ id: 6, name: 'Chúc bạn may mắn lần sau', color: '#ef3f3f' },
+	{
+		id: 1,
+		name: 'Xe ô tô điện',
+		color: '#ffffff',
+		image: '/img/xeoto.png',
+		imageSize: 115
+	},
+	{
+		id: 2,
+		name: 'Chúc bạn may mắn lần sau',
+		color: '#ec407a'
+	},
+	{
+		id: 3,
+		name: 'Xe Scooter',
+		color: '#ffffff',
+		image: '/img/scooter.png',
+		imageSize: 80
+	},
+	{
+		id: 4,
+		name: 'Chúc bạn may mắn lần sau',
+		color: '#ec407a'
+	},
+	{
+		id: 5,
+		name: 'Xe đạp',
+		color: '#ffffff',
+		image: '/img/xedap.png',
+		imageSize: 125
+	},
+	{
+		id: 6,
+		name: 'Chúc bạn may mắn lần sau',
+		color: '#ec407a'
+	},
 ]
 
 let ctx = null
@@ -87,20 +117,42 @@ const drawWheel = (rotation = 0) => {
 	const cx = canvas.width / 2
 	const cy = canvas.height / 2
 
-	// vòng quà nhỏ hơn để chừa chỗ cho vòng đèn ngoài
-	const radius = cx - 24
+	const radius = cx - 34
 	const arc = (Math.PI * 2) / prizes.length
 
 	ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-	// viền đỏ ngoài
+	// bóng đổ ngoài vòng quay
+	ctx.save()
 	ctx.beginPath()
-	ctx.arc(cx, cy, radius + 17, 0, Math.PI * 2)
-	ctx.strokeStyle = '#c90000'
-	ctx.lineWidth = 8
+	ctx.arc(cx, cy, radius + 28, 0, Math.PI * 2)
+	ctx.shadowColor = 'rgba(233, 30, 99, 0.35)'
+	ctx.shadowBlur = 22
+	ctx.shadowOffsetY = 10
+	ctx.fillStyle = '#ff9fbd'
+	ctx.fill()
+	ctx.restore()
+
+	// viền hồng ngoài
+	ctx.beginPath()
+	ctx.arc(cx, cy, radius + 26, 0, Math.PI * 2)
+	ctx.strokeStyle = '#ff5f9e'
+	ctx.lineWidth = 12
 	ctx.stroke()
 
-	// vẽ các ô quà
+	// viền hồng nhạt bên trong
+	ctx.beginPath()
+	ctx.arc(cx, cy, radius + 16, 0, Math.PI * 2)
+	ctx.strokeStyle = '#ffb3cc'
+	ctx.lineWidth = 12
+	ctx.stroke()
+
+	// nền trắng bên trong viền
+	ctx.beginPath()
+	ctx.arc(cx, cy, radius + 6, 0, Math.PI * 2)
+	ctx.fillStyle = '#fff7fb'
+	ctx.fill()
+
 	// vẽ các ô quà
 	prizes.forEach((prize, index) => {
 		const startAngle = rotation + index * arc - Math.PI / 2
@@ -114,15 +166,14 @@ const drawWheel = (rotation = 0) => {
 		ctx.fillStyle = prize.color
 		ctx.fill()
 
-		ctx.strokeStyle = '#ffffff'
-		ctx.lineWidth = 3
+		ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)'
+		ctx.lineWidth = 2
 		ctx.stroke()
 
-		// tách riêng vị trí text và ảnh
-		const textRadius = radius * 0.64
+		const textRadius = radius * 0.63
 		const imageRadius = radius * 0.62
 
-		// ô chúc may mắn -> hiện chữ
+		// ô chữ: may mắn lần sau
 		if (prize.name.includes('Chúc bạn may mắn')) {
 			ctx.save()
 
@@ -131,46 +182,50 @@ const drawWheel = (rotation = 0) => {
 				cy + Math.sin(midAngle) * textRadius
 			)
 
-			ctx.rotate(midAngle)
+			ctx.rotate(midAngle + Math.PI / 2)
 
 			if (midAngle > Math.PI / 2 && midAngle < Math.PI * 1.5) {
 				ctx.rotate(Math.PI)
 			}
 
-			ctx.fillStyle = '#fff'
-			ctx.font = 'bold 15px Arial'
+			ctx.fillStyle = '#ffffff'
+			ctx.font = 'bold 17px Arial'
 			ctx.textAlign = 'center'
 			ctx.textBaseline = 'middle'
+			ctx.shadowColor = 'rgba(0, 0, 0, 0.22)'
+			ctx.shadowBlur = 3
+			ctx.shadowOffsetY = 2
 
 			const words = prize.name.split(' ')
 			let line = ''
 			const lines = []
+			const maxTextWidth = 95
 
 			words.forEach(word => {
 				const testLine = line + word + ' '
 
-				if (ctx.measureText(testLine).width > 90) {
-					lines.push(line)
+				if (ctx.measureText(testLine).width > maxTextWidth) {
+					if (line.trim()) lines.push(line.trim())
 					line = word + ' '
 				} else {
 					line = testLine
 				}
 			})
 
-			lines.push(line)
+			if (line.trim()) lines.push(line.trim())
 
 			lines.forEach((txt, i) => {
 				ctx.fillText(
-					txt.trim(),
+					txt,
 					0,
-					(i - (lines.length - 1) / 2) * 16
+					(i - (lines.length - 1) / 2) * 19
 				)
 			})
 
 			ctx.restore()
 		}
 
-		// ô quà -> hiện hình
+		// ô quà: hiện hình
 		else if (prize.image) {
 			const img = prizeImages[prize.id]
 
@@ -182,28 +237,24 @@ const drawWheel = (rotation = 0) => {
 					cy + Math.sin(midAngle) * imageRadius
 				)
 
-				// xoay ảnh theo múi, nhìn cân hơn
 				ctx.rotate(midAngle + Math.PI / 2)
 
 				if (midAngle > Math.PI / 2 && midAngle < Math.PI * 1.5) {
 					ctx.rotate(Math.PI)
 				}
 
-				// khung an toàn cho ảnh
-				const maxWidth = 125
-				const maxHeight = 125
+				const boxSize = prize.imageSize || 125
 
 				const ratio = Math.min(
-					maxWidth / img.naturalWidth,
-					maxHeight / img.naturalHeight
+					boxSize / img.naturalWidth,
+					boxSize / img.naturalHeight
 				)
 
 				const drawWidth = img.naturalWidth * ratio
 				const drawHeight = img.naturalHeight * ratio
 
-				// tinh chỉnh nhẹ cho cân mắt
-				const offsetX = 0
-				const offsetY = -2
+				const offsetX = prize.offsetX || 0
+				const offsetY = prize.offsetY || -2
 
 				ctx.drawImage(
 					img,
@@ -217,9 +268,10 @@ const drawWheel = (rotation = 0) => {
 			}
 		}
 	})
-	// vòng đèn ngoài khớp sát viền
-	const lightRadius = radius + 16
-	const lightCount = 24
+
+	// vòng đèn ngoài
+	const lightRadius = radius + 22
+	const lightCount = 28
 
 	for (let i = 0; i < lightCount; i++) {
 		const angle = rotation + (Math.PI * 2 / lightCount) * i - Math.PI / 2
@@ -227,29 +279,45 @@ const drawWheel = (rotation = 0) => {
 		const y = cy + Math.sin(angle) * lightRadius
 
 		ctx.save()
+
 		ctx.beginPath()
-		ctx.arc(x, y, 4.5, 0, Math.PI * 2)
-		ctx.fillStyle = '#fff8d8'
+		ctx.arc(x, y, 5.5, 0, Math.PI * 2)
+		ctx.shadowColor = '#ffffff'
+		ctx.shadowBlur = 10
+		ctx.fillStyle = i % 2 === 0 ? '#ffffff' : '#ffd6e6'
 		ctx.fill()
 
-		ctx.strokeStyle = '#ffd34d'
+		ctx.beginPath()
+		ctx.arc(x, y, 5.5, 0, Math.PI * 2)
+		ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)'
 		ctx.lineWidth = 1
 		ctx.stroke()
+
 		ctx.restore()
 	}
 
 	// tâm vòng quay
+	const centerRadius = 42
+
+	ctx.save()
+
 	ctx.beginPath()
-	ctx.arc(cx, cy, 38, 0, Math.PI * 2)
-	ctx.fillStyle = '#fff'
+	ctx.arc(cx, cy, centerRadius + 5, 0, Math.PI * 2)
+	ctx.fillStyle = '#ff7aa8'
 	ctx.fill()
-	ctx.strokeStyle = '#ffd34d'
+
+	ctx.beginPath()
+	ctx.arc(cx, cy, centerRadius, 0, Math.PI * 2)
+	ctx.fillStyle = '#ffffff'
+	ctx.fill()
+
+	ctx.strokeStyle = '#ffd1e1'
 	ctx.lineWidth = 5
 	ctx.stroke()
 
 	if (centerLogo.complete && centerLogo.naturalWidth > 0) {
-		const maxLogoWidth = 64
-		const maxLogoHeight = 34
+		const maxLogoWidth = 66
+		const maxLogoHeight = 36
 
 		const logoRatio = Math.min(
 			maxLogoWidth / centerLogo.naturalWidth,
@@ -267,13 +335,16 @@ const drawWheel = (rotation = 0) => {
 			logoHeight
 		)
 	} else {
-		ctx.fillStyle = '#e60012'
+		ctx.fillStyle = '#e91e63'
 		ctx.font = 'bold 13px Arial'
 		ctx.textAlign = 'center'
 		ctx.textBaseline = 'middle'
 		ctx.fillText('Con Cưng', cx, cy)
 	}
+
+	ctx.restore()
 }
+
 const openSpunPopup = () => {
 	if (!hasSpun.value) {
 		return
@@ -316,6 +387,7 @@ const handleCanvasClick = event => {
 		openSpunPopup()
 	}
 }
+
 const spinWheel = (forcedPrizeId = null) => {
 	if (isSpinning.value) return
 
@@ -486,19 +558,78 @@ const spinWheel = (forcedPrizeId = null) => {
 				</div>
 				<div class="tab-content">
 					<div class="wheel-wrap">
-						<div class="wheel-pointer"></div>
+						<div class="wheel-pointer">
+							<svg width="34" height="82" viewBox="0 0 120 140" xmlns="http://www.w3.org/2000/svg">
+								<defs>
+									<linearGradient id="pointerGrad" x1="0" y1="0" x2="0" y2="1">
+										<stop offset="0%" stop-color="#ff5fa8" />
+										<stop offset="55%" stop-color="#f72b83" />
+										<stop offset="100%" stop-color="#c0186a" />
+									</linearGradient>
 
-						<div class="wheel-border">
+									<filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+										<feGaussianBlur stdDeviation="4" result="blur" />
+										<feMerge>
+											<feMergeNode in="blur" />
+											<feMergeNode in="SourceGraphic" />
+										</feMerge>
+									</filter>
+
+									<filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+										<feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#8b0b52"
+											flood-opacity="0.45" />
+									</filter>
+								</defs>
+
+								<!-- pointer body -->
+								<g filter="url(#shadow)">
+									<path d="M60 6
+         C35 6 15 26 15 51
+         C15 80 43 96 60 132
+         C77 96 105 80 105 51
+         C105 26 85 6 60 6Z" fill="url(#pointerGrad)" stroke="#ffd3ea" stroke-width="5" stroke-linejoin="round" />
+
+									<!-- inner highlight -->
+									<path d="M60 14
+         C39 14 23 30 23 51
+         C23 72 44 89 60 118
+         C76 89 97 72 97 51
+         C97 30 81 14 60 14Z" fill="none" stroke="#ff9ccd" stroke-width="3" opacity="0.55" />
+								</g>
+
+								<!-- light dots -->
+								<circle cx="26" cy="45" r="5" fill="#ffd9ee" filter="url(#glow)" />
+								<circle cx="94" cy="45" r="5" fill="#ffd9ee" filter="url(#glow)" />
+
+								<!-- heart icon -->
+								<path d="M60 73
+       C59 72 43 63 43 50
+       C43 42 49 37 56 39
+       C59 40 60 43 60 43
+       C60 43 61 40 64 39
+       C71 37 77 42 77 50
+       C77 63 61 72 60 73Z" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round"
+									stroke-linejoin="round" />
+
+								<path d="M60 73
+       C59 72 43 63 43 50
+       C43 42 49 37 56 39
+       C59 40 60 43 60 43
+       C60 43 61 40 64 39
+       C71 37 77 42 77 50
+       C77 63 61 72 60 73Z" fill="#ff5fa8" />
+							</svg>
+						</div>
+
+						<div class="wheel-border" @click="handleCanvasClick">
 							<div class="wheel-lights">
 								<span v-for="n in 24" :key="n"
 									:style="{ transform: `rotate(${(n - 1) * 15}deg) translateY(-150px)` }"></span>
 							</div>
-
-							<canvas ref="wheelCanvas" width="360" height="360" class="wheel-canvas"
-								@click="handleCanvasClick"></canvas>
+							<canvas ref="wheelCanvas" width="360" height="360" class="wheel-canvas"></canvas>
 						</div>
 
-						<button class="spin-btn" @click="spinWheel(1)" :disabled="isSpinning || hasSpun">
+						<button class="spin-btn" @click="spinWheel(3)" :disabled="isSpinning || hasSpun">
 							{{ hasSpun ? 'ĐÃ QUAY' : isSpinning ? 'ĐANG QUAY...' : 'QUAY NGAY' }}
 						</button>
 					</div>
@@ -726,6 +857,10 @@ const spinWheel = (forcedPrizeId = null) => {
 	transition: transform 3.6s cubic-bezier(.12, .75, .25, 1);
 }
 
+.wheel-canvas {
+	cursor: pointer;
+}
+
 .wheel-label {
 	position: absolute;
 	left: 50%;
@@ -770,18 +905,92 @@ const spinWheel = (forcedPrizeId = null) => {
 		inset 0 0 0 4px #fff3d0;
 }
 
+/* Xóa toàn bộ .wheel-pointer, .wheel-pointer::before, .wheel-pointer::after, .pointer-heart cũ
+   Thay bằng phần dưới đây */
+
 .wheel-pointer {
 	position: absolute;
-	top: -6px;
+	top: -14px;
 	left: 50%;
 	transform: translateX(-50%);
 	z-index: 10;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+.pointer-body {
+	width: 54px;
+	height: 62px;
+	border-radius: 27px 27px 22px 22px;
+	background: linear-gradient(180deg,
+			#ff7dcb 0%,
+			#f02496 40%,
+			#c8146a 100%);
+	border: 4px solid rgba(255, 255, 255, 0.88);
+	box-shadow:
+		0 0 0 2px rgba(170, 10, 90, 0.55),
+		inset 0 4px 10px rgba(255, 255, 255, 0.45),
+		inset 0 -4px 10px rgba(100, 0, 55, 0.38),
+		0 6px 20px rgba(180, 10, 100, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+/* Mũi tên - viền trắng (lớp ngoài) */
+.pointer-tip {
+	position: relative;
+	width: 54px;
+	height: 28px;
+	margin-top: -3px;
+	display: flex;
+	justify-content: center;
+}
+
+.pointer-tip::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 50%;
+	transform: translateX(-50%);
 	width: 0;
 	height: 0;
-	border-left: 18px solid transparent;
-	border-right: 18px solid transparent;
-	border-top: 38px solid #e00000;
-	filter: drop-shadow(0 3px 3px rgba(0, 0, 0, .3));
+	border-left: 20px solid transparent;
+	border-right: 20px solid transparent;
+	border-top: 30px solid rgba(255, 255, 255, 0.88);
+}
+
+/* Mũi tên - màu chính (lớp trong, tạo hiệu ứng viền trắng) */
+.pointer-tip::after {
+	content: "";
+	position: absolute;
+	top: 4px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 0;
+	height: 0;
+	border-left: 16px solid transparent;
+	border-right: 16px solid transparent;
+	border-top: 25px solid #c8146a;
+	z-index: 2;
+}
+
+.pointer-heart {
+	width: 34px;
+	height: 34px;
+	border-radius: 50%;
+	background: #ffffff;
+	color: #e8196e;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 18px;
+	font-weight: bold;
+	line-height: 1;
+	box-shadow:
+		inset 0 2px 4px rgba(230, 100, 160, 0.3),
+		0 2px 6px rgba(160, 0, 80, 0.25);
 }
 
 .spin-btn {
