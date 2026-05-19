@@ -651,7 +651,7 @@ const spinWheel = (forcedPrizeId = null) => {
 							<canvas ref="wheelCanvas" class="wheel-canvas"></canvas>
 						</div>
 
-						<button class="spin-btn" @click="spinWheel(1)" :disabled="isSpinning || hasSpun">
+						<button class="spin-btn" @click="spinWheel(5)" :disabled="isSpinning || hasSpun">
 							{{ hasSpun ? 'ĐÃ QUAY' : isSpinning ? 'ĐANG QUAY...' : 'QUAY NGAY' }}
 						</button>
 					</div>
