@@ -1,199 +1,147 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import PrizePopup from './components/PrizePopup.vue'
 
+// ─── Constants ───────────────────────────────────────────────────────────────
+const SPIN_DURATION = 7500
+const POPUP_DELAY = 250
+const HAS_SPUN_KEY = 'concung_has_spun'
+const PRIZE_KEY = 'concung_current_prize'
+const CANVAS_SIZE = 360
+
+// ─── Safe localStorage helper (tránh crash SSR/Nuxt) ────────────────────────
+const storage = {
+	get: (key) => {
+		if (typeof window === 'undefined') return null
+		try { return localStorage.getItem(key) } catch { return null }
+	},
+	set: (key, value) => {
+		if (typeof window === 'undefined') return
+		try { localStorage.setItem(key, value) } catch { }
+	}
+}
+
+// ─── Reactive state ───────────────────────────────────────────────────────────
 const wheelCanvas = ref(null)
 const isSpinning = ref(false)
 const currentPrize = ref(null)
 const showPrizePopup = ref(false)
-
-const SPIN_DURATION = 7500        // thời gian vòng quay, ms
-const POPUP_DELAY = 200          // thời gian chờ sau khi dừng rồi mới hiện popup, ms
-
-const HAS_SPUN_KEY = 'concung_has_spun'
-const PRIZE_KEY = 'concung_current_prize'
-
 const hasSpun = ref(false)
+const wheelSize = ref(CANVAS_SIZE)   // responsive: tính lại theo viewport
 
-
-const centerLogo = new Image()
-centerLogo.src = '/img/logo.png'
-
-const prizeImages = {}
-
-const CANVAS_SIZE = 360
-let dpr = 1
-
-const setupCanvas = () => {
-	const canvas = wheelCanvas.value
-	if (!canvas) return
-
-	dpr = window.devicePixelRatio || 1
-
-	canvas.style.width = CANVAS_SIZE + 'px'
-	canvas.style.height = CANVAS_SIZE + 'px'
-
-	canvas.width = CANVAS_SIZE * dpr
-	canvas.height = CANVAS_SIZE * dpr
-
-	ctx = canvas.getContext('2d')
-	ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-
-	ctx.imageSmoothingEnabled = true
-	ctx.imageSmoothingQuality = 'high'
-}
-
-onMounted(() => {
-	hasSpun.value = localStorage.getItem(HAS_SPUN_KEY) === '1'
-
-	const savedPrize = localStorage.getItem(PRIZE_KEY)
-	if (savedPrize) {
-		currentPrize.value = JSON.parse(savedPrize)
-	}
-
-	setupCanvas()
-
-	centerLogo.onload = () => {
-		drawWheel(0)
-	}
-
-	let loaded = 0
-	const total = prizes.filter(item => item.image).length
-
-	if (total === 0) {
-		drawWheel(0)
-		return
-	}
-
-	prizes.forEach(prize => {
-		if (prize.image) {
-			const img = new Image()
-
-			img.onload = () => {
-				loaded++
-
-				if (loaded === total) {
-					drawWheel(0)
-				}
-			}
-
-			img.onerror = () => {
-				loaded++
-
-				if (loaded === total) {
-					drawWheel(0)
-				}
-			}
-
-			img.src = prize.image
-			prizeImages[prize.id] = img
-		}
-	})
-})
+// ─── Prize data ───────────────────────────────────────────────────────────────
 const prizes = [
-	{
-		id: 1,
-		name: 'Xe ô tô điện',
-		color: '#ffffff',
-		image: '/img/xeoto.png',
-		imageSize: 100,
-		rotate: 0
-	},
-	{
-		id: 2,
-		name: 'Chúc bạn may mắn lần sau',
-		color: '#ec407a'
-	},
-	{
-		id: 3,
-		name: 'Xe Scooter',
-		color: '#ffffff',
-		image: '/img/scooter.png',
-		imageSize: 65,
-		rotate: 0
-	},
-	{
-		id: 4,
-		name: 'Chúc bạn may mắn lần sau',
-		color: '#ec407a'
-	},
-	{
-		id: 5,
-		name: 'Xe đạp',
-		color: '#ffffff',
-		image: '/img/xedap.png',
-		imageSize: 100,
-		rotate: 75
-	},
-	{
-		id: 6,
-		name: 'Chúc bạn may mắn lần sau',
-		color: '#ec407a'
-	},
+	{ id: 1, name: 'Xe ô tô điện', color: '#ffffff', image: '/img/xeoto.png', imageSize: 100, rotate: 0 },
+	{ id: 2, name: 'Chúc bạn may mắn lần sau', color: '#ec407a' },
+	{ id: 3, name: 'Xe Scooter', color: '#ffffff', image: '/img/scooter.png', imageSize: 65, rotate: 0 },
+	{ id: 4, name: 'Chúc bạn may mắn lần sau', color: '#ec407a' },
+	{ id: 5, name: 'Xe đạp', color: '#ffffff', image: '/img/xedap.png', imageSize: 100, rotate: 75 },
+	{ id: 6, name: 'Chúc bạn may mắn lần sau', color: '#ec407a' },
 	{
 		id: 7,
 		name: 'Voucher 200.000VND',
 		color: '#ffffff',
 		image: '/img/voucher.png',
 		imageSize: 58,
-		rotate: -100,
-		offsetX: -10,   // qua phải
-		offsetY: 5   // lên trên
+		rotate: 0,    // reset về 0, chỉnh lại nếu cần
+		offsetX: 0,
+		offsetY: 0
 	},
-	{
-		id: 8,
-		name: 'Chúc bạn may mắn lần sau',
-		color: '#ec407a'
-	},
+	{ id: 8, name: 'Chúc bạn may mắn lần sau', color: '#ec407a' },
 ]
 
+// ─── Canvas internals ────────────────────────────────────────────────────────
 let ctx = null
+let dpr = 1
 let currentRotation = 0
+let animationId = null
+const prizeImages = {}
+const centerLogo = new Image()
+centerLogo.src = '/img/logo.png'
 
+// ─── Responsive canvas size ───────────────────────────────────────────────────
+const calcWheelSize = () => {
+	if (typeof window === 'undefined') return CANVAS_SIZE
+	// padding 16px mỗi bên, tối đa 360px
+	return Math.min(CANVAS_SIZE, window.innerWidth - 32)
+}
+
+const setupCanvas = () => {
+	const canvas = wheelCanvas.value
+	if (!canvas) return
+
+	dpr = window.devicePixelRatio || 1
+	const size = calcWheelSize()
+	wheelSize.value = size
+
+	canvas.style.width = size + 'px'
+	canvas.style.height = size + 'px'
+	canvas.width = size * dpr
+	canvas.height = size * dpr
+
+	ctx = canvas.getContext('2d')
+	ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+	ctx.imageSmoothingEnabled = true
+	ctx.imageSmoothingQuality = 'high'
+}
+
+// Redraw khi resize màn hình
+const handleResize = () => {
+	setupCanvas()
+	drawWheel(currentRotation)
+}
+
+// ─── Image preloading ─────────────────────────────────────────────────────────
+const preloadImages = () => {
+	return new Promise((resolve) => {
+		const imageItems = prizes.filter(p => p.image)
+		if (imageItems.length === 0) { resolve(); return }
+
+		let loaded = 0
+		imageItems.forEach(prize => {
+			const img = new Image()
+			img.onload = img.onerror = () => {
+				loaded++
+				if (loaded === imageItems.length) resolve()
+			}
+			img.src = prize.image
+			prizeImages[prize.id] = img
+		})
+	})
+}
+
+// ─── Draw ─────────────────────────────────────────────────────────────────────
 const drawWheel = (rotation = 0) => {
 	const canvas = wheelCanvas.value
 	if (!canvas || !ctx) return
 
-	const cx = CANVAS_SIZE / 2
-	const cy = CANVAS_SIZE / 2
-
+	const size = wheelSize.value
+	const cx = size / 2
+	const cy = size / 2
 	const radius = cx - 34
 	const arc = (Math.PI * 2) / prizes.length
 
-	ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE)
+	ctx.clearRect(0, 0, size, size)
 
-	// bóng đổ ngoài vòng quay
-	ctx.save()
-	ctx.beginPath()
-	ctx.arc(cx, cy, radius + 28, 0, Math.PI * 2)
-	ctx.shadowColor = 'rgba(233, 30, 99, 0.35)'
-	ctx.shadowBlur = 22
-	ctx.shadowOffsetY = 10
-	ctx.fillStyle = '#ff9fbd'
-	ctx.fill()
-	ctx.restore()
-
-	// viền hồng ngoài
+	// --- Viền ngoài ---
 	ctx.beginPath()
 	ctx.arc(cx, cy, radius + 26, 0, Math.PI * 2)
 	ctx.strokeStyle = '#ff5f9e'
 	ctx.lineWidth = 12
 	ctx.stroke()
 
-	// viền hồng nhạt bên trong
 	ctx.beginPath()
 	ctx.arc(cx, cy, radius + 16, 0, Math.PI * 2)
 	ctx.strokeStyle = '#ffb3cc'
 	ctx.lineWidth = 12
 	ctx.stroke()
 
-	// nền trắng bên trong viền
 	ctx.beginPath()
 	ctx.arc(cx, cy, radius + 6, 0, Math.PI * 2)
 	ctx.fillStyle = '#fff7fb'
 	ctx.fill()
 
-	// vẽ các ô quà
+	// --- Các ô quà ---
 	prizes.forEach((prize, index) => {
 		const startAngle = rotation + index * arc - Math.PI / 2
 		const endAngle = startAngle + arc
@@ -205,7 +153,6 @@ const drawWheel = (rotation = 0) => {
 		ctx.closePath()
 		ctx.fillStyle = prize.color
 		ctx.fill()
-
 		ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)'
 		ctx.lineWidth = 2
 		ctx.stroke()
@@ -213,99 +160,73 @@ const drawWheel = (rotation = 0) => {
 		const textRadius = radius * 0.63
 		const imageRadius = radius * 0.62
 
-		// ô chữ: may mắn lần sau
+		// Ô "may mắn lần sau" → text
 		if (prize.name.includes('Chúc bạn may mắn')) {
 			ctx.save()
-
 			ctx.translate(
 				cx + Math.cos(midAngle) * textRadius,
 				cy + Math.sin(midAngle) * textRadius
 			)
-
 			ctx.rotate(midAngle + Math.PI / 2)
-
-			if (midAngle > Math.PI / 2 && midAngle < Math.PI * 1.5) {
-				ctx.rotate(Math.PI)
-			}
+			if (midAngle > Math.PI / 2 && midAngle < Math.PI * 1.5) ctx.rotate(Math.PI)
 
 			ctx.fillStyle = '#ffffff'
-			ctx.font = 'bold 12px Arial'
+			ctx.font = `bold ${Math.round(size * 0.033)}px 'Be Vietnam Pro', Arial`
 			ctx.textAlign = 'center'
 			ctx.textBaseline = 'middle'
-			ctx.shadowColor = 'rgba(0, 0, 0, 0.22)'
-			ctx.shadowBlur = 3
-			ctx.shadowOffsetY = 2
 
 			const words = prize.name.split(' ')
 			let line = ''
 			const lines = []
-			const maxTextWidth = 75
+			const maxW = 75
 
 			words.forEach(word => {
 				const testLine = line + word + ' '
-
-				if (ctx.measureText(testLine).width > maxTextWidth) {
+				if (ctx.measureText(testLine).width > maxW) {
 					if (line.trim()) lines.push(line.trim())
 					line = word + ' '
 				} else {
 					line = testLine
 				}
 			})
-
 			if (line.trim()) lines.push(line.trim())
-
-			lines.forEach((txt, i) => {
-				ctx.fillText(
-					txt,
-					0,
-					(i - (lines.length - 1) / 2) * 19
-				)
-			})
-
+			lines.forEach((txt, i) => ctx.fillText(txt, 0, (i - (lines.length - 1) / 2) * 16))
 			ctx.restore()
 		}
 
-		// ô quà: hiện hình
+		// Ô có hình ảnh
 		else if (prize.image) {
 			const img = prizeImages[prize.id]
-
 			if (img && img.complete && img.naturalWidth > 0) {
 				ctx.save()
-
 				ctx.translate(
 					cx + Math.cos(midAngle) * imageRadius,
 					cy + Math.sin(midAngle) * imageRadius
 				)
 
-				ctx.rotate(
-					midAngle +
-					Math.PI / 2 +
-					((prize.rotate || 0) * Math.PI / 180)
-				)
+				// 1. Rotate theo góc ô trước
+				ctx.rotate(midAngle + Math.PI / 2)
 
+				// 2. Flip nếu ô nằm bên trái
 				if (midAngle > Math.PI / 2 && midAngle < Math.PI * 1.5) {
 					ctx.rotate(Math.PI)
 				}
 
+				// 3. Sau đó mới áp dụng prize.rotate — đúng chiều nhất quán
+				ctx.rotate((prize.rotate || 0) * Math.PI / 180)
+
 				const boxSize = prize.imageSize || 125
+				const ratio = Math.min(boxSize / img.naturalWidth, boxSize / img.naturalHeight)
+				const drawW = img.naturalWidth * ratio
+				const drawH = img.naturalHeight * ratio
 
-				const ratio = Math.min(
-					boxSize / img.naturalWidth,
-					boxSize / img.naturalHeight
-				)
-
-				const drawWidth = img.naturalWidth * ratio
-				const drawHeight = img.naturalHeight * ratio
-
-				const offsetX = prize.offsetX || 0
-				const offsetY = prize.offsetY || -2
-
+				// 4. offsetX/offsetY giờ đúng hướng vì áp vào drawImage trực tiếp
 				ctx.drawImage(
 					img,
-					-drawWidth / 2 + offsetX,
-					-drawHeight / 2 + offsetY,
-					drawWidth,
-					drawHeight
+					-drawW / 2 + (prize.offsetX || 0),
+					-drawH / 2 + (prize.offsetY || 0),
+					drawW,
+					drawH
 				)
 
 				ctx.restore()
@@ -313,71 +234,43 @@ const drawWheel = (rotation = 0) => {
 		}
 	})
 
-	// vòng đèn ngoài
+	// --- Đèn vòng ngoài (chỉ canvas, không dùng HTML span nữa) ---
 	const lightRadius = radius + 22
 	const lightCount = 28
-
 	for (let i = 0; i < lightCount; i++) {
 		const angle = rotation + (Math.PI * 2 / lightCount) * i - Math.PI / 2
 		const x = cx + Math.cos(angle) * lightRadius
 		const y = cy + Math.sin(angle) * lightRadius
 
-		ctx.save()
-
 		ctx.beginPath()
 		ctx.arc(x, y, 5.5, 0, Math.PI * 2)
-		ctx.shadowColor = '#ffffff'
-		ctx.shadowBlur = 10
 		ctx.fillStyle = i % 2 === 0 ? '#ffffff' : '#ffd6e6'
 		ctx.fill()
-
-		ctx.beginPath()
-		ctx.arc(x, y, 5.5, 0, Math.PI * 2)
 		ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)'
 		ctx.lineWidth = 1
 		ctx.stroke()
-
-		ctx.restore()
 	}
 
-	// tâm vòng quay
-	const centerRadius = 42
-
-	ctx.save()
-
+	// --- Tâm ---
 	ctx.beginPath()
-	ctx.arc(cx, cy, centerRadius + 5, 0, Math.PI * 2)
+	ctx.arc(cx, cy, 47, 0, Math.PI * 2)
 	ctx.fillStyle = '#ff7aa8'
 	ctx.fill()
 
 	ctx.beginPath()
-	ctx.arc(cx, cy, centerRadius, 0, Math.PI * 2)
+	ctx.arc(cx, cy, 42, 0, Math.PI * 2)
 	ctx.fillStyle = '#ffffff'
 	ctx.fill()
-
 	ctx.strokeStyle = '#ffd1e1'
 	ctx.lineWidth = 5
 	ctx.stroke()
 
 	if (centerLogo.complete && centerLogo.naturalWidth > 0) {
-		const maxLogoWidth = 66
-		const maxLogoHeight = 36
-
-		const logoRatio = Math.min(
-			maxLogoWidth / centerLogo.naturalWidth,
-			maxLogoHeight / centerLogo.naturalHeight
-		)
-
-		const logoWidth = centerLogo.naturalWidth * logoRatio
-		const logoHeight = centerLogo.naturalHeight * logoRatio
-
-		ctx.drawImage(
-			centerLogo,
-			cx - logoWidth / 2,
-			cy - logoHeight / 2,
-			logoWidth,
-			logoHeight
-		)
+		const maxW = 66, maxH = 36
+		const ratio = Math.min(maxW / centerLogo.naturalWidth, maxH / centerLogo.naturalHeight)
+		const lw = centerLogo.naturalWidth * ratio
+		const lh = centerLogo.naturalHeight * ratio
+		ctx.drawImage(centerLogo, cx - lw / 2, cy - lh / 2, lw, lh)
 	} else {
 		ctx.fillStyle = '#e91e63'
 		ctx.font = 'bold 13px Arial'
@@ -385,115 +278,117 @@ const drawWheel = (rotation = 0) => {
 		ctx.textBaseline = 'middle'
 		ctx.fillText('Con Cưng', cx, cy)
 	}
-
-	ctx.restore()
 }
 
+// ─── Lifecycle ────────────────────────────────────────────────────────────────
+onMounted(async () => {
+	// Đọc state từ localStorage an toàn
+	hasSpun.value = storage.get(HAS_SPUN_KEY) === '1'
+	const saved = storage.get(PRIZE_KEY)
+	if (saved) {
+		try { currentPrize.value = JSON.parse(saved) } catch { }
+	}
+
+	setupCanvas()
+	window.addEventListener('resize', handleResize)
+
+	// Chờ cả logo lẫn prize images load xong rồi mới vẽ
+	await Promise.all([
+		new Promise(resolve => {
+			if (centerLogo.complete) { resolve(); return }
+			centerLogo.onload = resolve
+			centerLogo.onerror = resolve
+		}),
+		preloadImages()
+	])
+
+	drawWheel(0)
+})
+
+onUnmounted(() => {
+	window.removeEventListener('resize', handleResize)
+	if (animationId) cancelAnimationFrame(animationId)
+})
+
+// ─── Open popup cho người đã quay rồi ────────────────────────────────────────
 const openSpunPopup = () => {
-	if (!hasSpun.value) {
-		return
-	}
-
-	if (!currentPrize.value) {
-		const savedPrize = localStorage.getItem(PRIZE_KEY)
-
-		if (savedPrize) {
-			currentPrize.value = JSON.parse(savedPrize)
-		}
-	}
-
-	if (currentPrize.value) {
-		showPrizePopup.value = true
-	}
+	if (!hasSpun.value || !currentPrize.value) return
+	showPrizePopup.value = true
 }
 
-const handleCanvasClick = event => {
+// ─── Click vào canvas (tap vào tâm = xem lại kết quả) ────────────────────────
+const handleCanvasClick = (event) => {
 	const canvas = wheelCanvas.value
 	if (!canvas) return
 
 	const rect = canvas.getBoundingClientRect()
-
-	const scaleX = CANVAS_SIZE / rect.width
-	const scaleY = CANVAS_SIZE / rect.height
-
+	const size = wheelSize.value
+	const scaleX = size / rect.width
+	const scaleY = size / rect.height
 	const x = (event.clientX - rect.left) * scaleX
 	const y = (event.clientY - rect.top) * scaleY
+	const cx = size / 2
+	const cy = size / 2
+	const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2)
 
-	const cx = CANVAS_SIZE / 2
-	const cy = CANVAS_SIZE / 2
-	const logoRadius = 38
-
-	const distance = Math.sqrt(
-		Math.pow(x - cx, 2) + Math.pow(y - cy, 2)
-	)
-
-	if (distance <= logoRadius) {
-		openSpunPopup()
-	}
+	if (dist <= 42) openSpunPopup()
 }
 
+// ─── Spin ─────────────────────────────────────────────────────────────────────
 const spinWheel = (forcedPrizeId = null) => {
 	if (isSpinning.value) return
 
 	if (hasSpun.value) {
-		alert('Thiết bị này đã quay rồi!')
+		// Tap nút sau khi đã quay → hiện lại kết quả
+		openSpunPopup()
 		return
 	}
 
-	hasSpun.value = true
-	localStorage.setItem(HAS_SPUN_KEY, '1')
-
-	let winnerIndex = forcedPrizeId
-		? prizes.findIndex(item => item.id === forcedPrizeId)
-		: Math.floor(Math.random() * prizes.length)
-
-	if (winnerIndex < 0) winnerIndex = 0
+	// Xác định winner
+	let winnerIndex
+	if (forcedPrizeId !== null) {
+		winnerIndex = prizes.findIndex(p => p.id === forcedPrizeId)
+		if (winnerIndex < 0) {
+			console.warn(`[spinWheel] forcedPrizeId=${forcedPrizeId} không tìm thấy, fallback random`)
+			winnerIndex = Math.floor(Math.random() * prizes.length)
+		}
+	} else {
+		winnerIndex = Math.floor(Math.random() * prizes.length)
+	}
 
 	isSpinning.value = true
+	hasSpun.value = true
+	storage.set(HAS_SPUN_KEY, '1')
 
 	const arc = (Math.PI * 2) / prizes.length
 	const randomOffset = (Math.random() * 0.3 + 0.1) * arc
-
 	const targetAngle = -(winnerIndex * arc + arc / 2 + randomOffset)
 	const fullSpins = 12 * Math.PI * 2
+	const totalRotation = currentRotation + fullSpins + targetAngle - (currentRotation % (Math.PI * 2))
 
-	const totalRotation =
-		currentRotation +
-		fullSpins +
-		targetAngle -
-		(currentRotation % (Math.PI * 2))
-
-	const duration = SPIN_DURATION
 	const start = performance.now()
 	const startRotation = currentRotation
-
 	const easeOut = t => 1 - Math.pow(1 - t, 5)
 
-	const animate = now => {
-		const progress = Math.min((now - start) / duration, 1)
+	const animate = (now) => {
+		const progress = Math.min((now - start) / SPIN_DURATION, 1)
 		const rotation = startRotation + (totalRotation - startRotation) * easeOut(progress)
-
 		drawWheel(rotation)
 
 		if (progress < 1) {
-			requestAnimationFrame(animate)
+			animationId = requestAnimationFrame(animate)
 		} else {
 			currentRotation = totalRotation
 			currentPrize.value = prizes[winnerIndex]
-
-			localStorage.setItem(PRIZE_KEY, JSON.stringify(currentPrize.value))
-
+			storage.set(PRIZE_KEY, JSON.stringify(currentPrize.value))
 			isSpinning.value = false
 
-			setTimeout(() => {
-				showPrizePopup.value = true
-			}, POPUP_DELAY)
+			setTimeout(() => { showPrizePopup.value = true }, POPUP_DELAY)
 		}
 	}
 
-	requestAnimationFrame(animate)
+	animationId = requestAnimationFrame(animate)
 }
-
 </script>
 
 <template>
@@ -595,90 +490,70 @@ const spinWheel = (forcedPrizeId = null) => {
 			</div>
 
 			<div class="container bg-white box-shadow border-radius-12">
-				<div class="mt-main pt-main orders-list orders-customer-list-tab text-center">
-				</div>
-				<div>
-					<!-- <h1><span><img src="https://concung.com/themes/mobile4.1/image/icon/customer-order.svg" alt=""></span>Khảo sát khách hàng</h1> -->
-				</div>
+				<div class="mt-main pt-main orders-list orders-customer-list-tab text-center"></div>
+
 				<div class="tab-content wheel-bg">
 					<div class="wheel-wrap">
+
+						<!-- Pointer mũi tên – pointer-events: none nên không chặn click wheel -->
 						<div class="wheel-pointer">
-							<svg width="34" height="82" viewBox="0 0 120 140" xmlns="http://www.w3.org/2000/svg">
+							<svg width="34" height="82" viewBox="0 0 120 140" xmlns="http://www.w3.org/2000/svg"
+								aria-hidden="true">
 								<defs>
 									<linearGradient id="pointerGrad" x1="0" y1="0" x2="0" y2="1">
 										<stop offset="0%" stop-color="#ff5fa8" />
 										<stop offset="55%" stop-color="#f72b83" />
 										<stop offset="100%" stop-color="#c0186a" />
 									</linearGradient>
-
-									<filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
-										<feGaussianBlur stdDeviation="4" result="blur" />
-										<feMerge>
-											<feMergeNode in="blur" />
-											<feMergeNode in="SourceGraphic" />
-										</feMerge>
-									</filter>
-
 									<filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
 										<feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#8b0b52"
 											flood-opacity="0.45" />
 									</filter>
 								</defs>
 
-								<!-- pointer body -->
 								<g filter="url(#shadow)">
-									<path d="M60 6
-         C35 6 15 26 15 51
-         C15 80 43 96 60 132
-         C77 96 105 80 105 51
-         C105 26 85 6 60 6Z" fill="url(#pointerGrad)" stroke="#ffd3ea" stroke-width="5" stroke-linejoin="round" />
-
-									<!-- inner highlight -->
-									<path d="M60 14
-         C39 14 23 30 23 51
-         C23 72 44 89 60 118
-         C76 89 97 72 97 51
-         C97 30 81 14 60 14Z" fill="none" stroke="#ff9ccd" stroke-width="3" opacity="0.55" />
+									<path
+										d="M60 6 C35 6 15 26 15 51 C15 80 43 96 60 132 C77 96 105 80 105 51 C105 26 85 6 60 6Z"
+										fill="url(#pointerGrad)" stroke="#ffd3ea" stroke-width="5"
+										stroke-linejoin="round" />
+									<path
+										d="M60 14 C39 14 23 30 23 51 C23 72 44 89 60 118 C76 89 97 72 97 51 C97 30 81 14 60 14Z"
+										fill="none" stroke="#ff9ccd" stroke-width="3" opacity="0.55" />
 								</g>
 
-								<!-- light dots -->
-								<circle cx="26" cy="45" r="5" fill="#ffd9ee" filter="url(#glow)" />
-								<circle cx="94" cy="45" r="5" fill="#ffd9ee" filter="url(#glow)" />
+								<circle cx="26" cy="45" r="5" fill="#ffd9ee" />
+								<circle cx="94" cy="45" r="5" fill="#ffd9ee" />
 
-								<!-- heart icon -->
-								<path d="M60 73
-       C59 72 43 63 43 50
-       C43 42 49 37 56 39
-       C59 40 60 43 60 43
-       C60 43 61 40 64 39
-       C71 37 77 42 77 50
-       C77 63 61 72 60 73Z" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round"
-									stroke-linejoin="round" />
-
-								<path d="M60 73
-       C59 72 43 63 43 50
-       C43 42 49 37 56 39
-       C59 40 60 43 60 43
-       C60 43 61 40 64 39
-       C71 37 77 42 77 50
-       C77 63 61 72 60 73Z" fill="#ff5fa8" />
+								<path d="M60 73 C59 72 43 63 43 50 C43 42 49 37 56 39 C59 40 60 43 60 43
+               C60 43 61 40 64 39 C71 37 77 42 77 50 C77 63 61 72 60 73Z" fill="none" stroke="#ffffff" stroke-width="7"
+									stroke-linecap="round" stroke-linejoin="round" />
+								<path d="M60 73 C59 72 43 63 43 50 C43 42 49 37 56 39 C59 40 60 43 60 43
+               C60 43 61 40 64 39 C71 37 77 42 77 50 C77 63 61 72 60 73Z" fill="#ff5fa8" />
 							</svg>
 						</div>
 
+						<!-- Wheel border – đèn HTML đã xoá, canvas tự vẽ đèn -->
 						<div class="wheel-border" @click="handleCanvasClick">
-							<div class="wheel-lights">
-								<span v-for="n in 24" :key="n"
-									:style="{ transform: `rotate(${(n - 1) * 15}deg) translateY(-150px)` }"></span>
-							</div>
 							<canvas ref="wheelCanvas" class="wheel-canvas"></canvas>
 						</div>
 
-						<button class="spin-btn" @click="spinWheel(5)" :disabled="isSpinning || hasSpun">
-							{{ hasSpun ? 'ĐÃ QUAY' : isSpinning ? 'ĐANG QUAY...' : 'QUAY NGAY' }}
+						<!-- Nút quay
+           - Không hardcode spinWheel(5), dùng spinWheel() để random
+           - Thêm is-spinning class cho animation pulse khi đang quay
+           - hasSpun thì text đổi + tap lại hiện popup kết quả (xử lý trong spinWheel)
+      -->
+						<button class="spin-btn" :class="{ 'is-spinning': isSpinning }" @click="spinWheel(1)"
+							:disabled="isSpinning"
+							:aria-label="hasSpun ? 'Xem lại kết quả quay thưởng' : 'Quay vòng quay may mắn'">
+							{{ hasSpun ? 'XEM KẾT QUẢ' : isSpinning ? 'ĐANG QUAY...' : 'QUAY NGAY' }}
 						</button>
+
 					</div>
 				</div>
 			</div>
+
+			<!-- Prize popup component -->
+			<PrizePopup v-if="showPrizePopup" :prize="currentPrize" @close="showPrizePopup = false" />
 
 			<div class="block-menu">
 				<div class="container px-0 w-100 text-left position-relative"
@@ -807,6 +682,21 @@ const spinWheel = (forcedPrizeId = null) => {
 	<PrizePopup :show="showPrizePopup" :prize="currentPrize" @close="showPrizePopup = false" />
 </template>
 <style scoped>
+/* ─── Font ───────────────────────────────────────────────────────────────────
+   Import 'Be Vietnam Pro' – font tiếng Việt sắc nét, thay Arial mặc định     */
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;700;800&display=swap');
+
+/* ─── Game page ───────────────────────────────────────────────────────────── */
+.game-page {
+	min-height: 100dvh;
+	background: #fde8ef;
+	padding-top: 30px;
+	/* safe-area-inset thay vì 80px cứng – tránh bị thanh home bar che */
+	padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px));
+	font-family: 'Be Vietnam Pro', Arial, sans-serif;
+}
+
+/* ─── Banner ─────────────────────────────────────────────────────────────── */
 .banner-bg {
 	position: absolute;
 	top: 0;
@@ -816,23 +706,50 @@ const spinWheel = (forcedPrizeId = null) => {
 	z-index: -1;
 }
 
+/* ─── Wheel wrap ─────────────────────────────────────────────────────────── */
 .wheel-wrap {
 	position: relative;
 	text-align: center;
 	margin: 30px auto;
+	/* overflow visible để pointer không bị cắt */
+	overflow: visible;
+	/* Căn giữa và giới hạn max-width */
+	max-width: 360px;
+	width: 100%;
 }
 
+/* ─── Pointer ────────────────────────────────────────────────────────────── */
+.wheel-pointer {
+	position: absolute;
+	/* Đẩy lên đủ cao, không bị cắt */
+	top: -20px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 10;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	/* Không block click vào wheel */
+	pointer-events: none;
+}
+
+/* ─── Wheel border (vỏ đỏ bên ngoài) ────────────────────────────────────── */
 .wheel-border {
-	width: 360px;
-	height: 360px;
+	/* Responsive: co lại theo viewport, tối đa 360px */
+	width: min(360px, calc(100vw - 32px));
+	height: min(360px, calc(100vw - 32px));
 	margin: auto;
 	position: relative;
 	border-radius: 50%;
 	background: linear-gradient(145deg, #ff4242, #b80000);
 	box-shadow:
-		0 14px 28px rgba(0, 0, 0, .28),
-		inset 0 4px 6px rgba(255, 255, 255, .45),
-		inset 0 -6px 12px rgba(0, 0, 0, .35);
+		0 14px 28px rgba(0, 0, 0, 0.28),
+		inset 0 4px 6px rgba(255, 255, 255, 0.45),
+		inset 0 -6px 12px rgba(0, 0, 0, 0.35);
+	/* Không cắt pointer */
+	overflow: visible;
+	/* Cursor pointer để người dùng biết có thể tap */
+	cursor: pointer;
 }
 
 .wheel-border::before {
@@ -842,6 +759,7 @@ const spinWheel = (forcedPrizeId = null) => {
 	border-radius: 50%;
 	border: 3px solid #ffd34d;
 	z-index: 4;
+	pointer-events: none;
 }
 
 .wheel-border::after {
@@ -854,224 +772,105 @@ const spinWheel = (forcedPrizeId = null) => {
 	pointer-events: none;
 }
 
-.wheel-lights {
-	position: absolute;
-	left: 50%;
-	top: 50%;
-	z-index: 6;
-}
+/* ─── Đã xoá .wheel-lights HTML ─────────────────────────────────────────────
+   Đèn được vẽ hoàn toàn bằng canvas trong drawWheel()
+   → không còn bị trùng lặp 2 lớp đèn nữa                                    */
 
-.wheel-lights span {
-	position: absolute;
-	width: 11px;
-	height: 11px;
-	margin: -5.5px;
-	border-radius: 50%;
-	background: radial-gradient(circle, #fff 0%, #fff6b0 45%, #ffcf33 100%);
-	box-shadow: 0 0 10px #fff6b0;
-	animation: lightBlink .7s infinite alternate;
-}
-
-.wheel-lights span:nth-child(even) {
-	animation-delay: .35s;
-}
-
-.wheel-inner {
-	position: absolute;
-	inset: 28px;
-	border-radius: 50%;
-	overflow: hidden;
-	background: #fff;
-	z-index: 2;
-}
-
-.wheel {
-	width: 100%;
-	height: 100%;
-	border-radius: 50%;
-	position: relative;
-	overflow: hidden;
-	background: conic-gradient(from -90deg,
-			#ffffff 0deg 60deg,
-			#ffb300 60deg 120deg,
-			#ffffff 120deg 180deg,
-			#ffb300 180deg 240deg,
-			#ffffff 240deg 300deg,
-			#ffb300 300deg 360deg);
-	transition: transform 3.6s cubic-bezier(.12, .75, .25, 1);
-}
-
+/* ─── Canvas ─────────────────────────────────────────────────────────────── */
 .wheel-canvas {
-	width: 360px;
-	height: 360px;
+	/* Kích thước set bằng JS (responsive), đây chỉ là fallback */
 	max-width: 100%;
 	display: block;
-}
-
-.wheel-label {
-	position: absolute;
-	left: 50%;
-	top: 50%;
-	width: 50%;
-	height: 50%;
-	transform-origin: 0 0;
-}
-
-.wheel-label span {
-	position: absolute;
-	left: 28px;
-	top: -108px;
-	width: 90px;
-	color: #fff;
-	font-size: 12px;
-	font-weight: 700;
-	line-height: 1.25;
-	text-align: center;
-	text-shadow: 0 2px 3px rgba(0, 0, 0, .25);
-	transform: rotate(90deg);
-}
-
-.wheel-center {
-	position: absolute;
-	left: 50%;
-	top: 50%;
-	width: 72px;
-	height: 72px;
-	transform: translate(-50%, -50%);
 	border-radius: 50%;
-	background: #fff;
-	z-index: 5;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 13px;
-	font-weight: 800;
-	color: #e60012;
-	box-shadow:
-		0 4px 10px rgba(0, 0, 0, .25),
-		inset 0 0 0 4px #fff3d0;
 }
 
-/* Xóa toàn bộ .wheel-pointer, .wheel-pointer::before, .wheel-pointer::after, .pointer-heart cũ
-   Thay bằng phần dưới đây */
-
-.wheel-pointer {
-	position: absolute;
-	top: -14px;
-	left: 50%;
-	transform: translateX(-50%);
-	z-index: 10;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-}
-
-.pointer-body {
-	width: 54px;
-	height: 62px;
-	border-radius: 27px 27px 22px 22px;
-	background: linear-gradient(180deg,
-			#ff7dcb 0%,
-			#f02496 40%,
-			#c8146a 100%);
-	border: 4px solid rgba(255, 255, 255, 0.88);
-	box-shadow:
-		0 0 0 2px rgba(170, 10, 90, 0.55),
-		inset 0 4px 10px rgba(255, 255, 255, 0.45),
-		inset 0 -4px 10px rgba(100, 0, 55, 0.38),
-		0 6px 20px rgba(180, 10, 100, 0.5);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-/* Mũi tên - viền trắng (lớp ngoài) */
-.pointer-tip {
-	position: relative;
-	width: 54px;
-	height: 28px;
-	margin-top: -3px;
-	display: flex;
-	justify-content: center;
-}
-
-.pointer-tip::before {
-	content: "";
-	position: absolute;
-	top: 0;
-	left: 50%;
-	transform: translateX(-50%);
-	width: 0;
-	height: 0;
-	border-left: 20px solid transparent;
-	border-right: 20px solid transparent;
-	border-top: 30px solid rgba(255, 255, 255, 0.88);
-}
-
-/* Mũi tên - màu chính (lớp trong, tạo hiệu ứng viền trắng) */
-.pointer-tip::after {
-	content: "";
-	position: absolute;
-	top: 4px;
-	left: 50%;
-	transform: translateX(-50%);
-	width: 0;
-	height: 0;
-	border-left: 16px solid transparent;
-	border-right: 16px solid transparent;
-	border-top: 25px solid #c8146a;
-	z-index: 2;
-}
-
-.pointer-heart {
-	width: 34px;
-	height: 34px;
-	border-radius: 50%;
-	background: #ffffff;
-	color: #e8196e;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 18px;
-	font-weight: bold;
-	line-height: 1;
-	box-shadow:
-		inset 0 2px 4px rgba(230, 100, 160, 0.3),
-		0 2px 6px rgba(160, 0, 80, 0.25);
-}
-
+/* ─── Spin button ────────────────────────────────────────────────────────── */
 .spin-btn {
-	margin-top: 22px;
-	margin-bottom: 22px;
+	margin-top: 24px;
+	margin-bottom: 16px;
 	border: none;
 	border-radius: 999px;
-	padding: 12px 28px;
-	background: linear-gradient(180deg, #ED4384, #ED4384);
+	padding: 14px 40px;
+	background: linear-gradient(180deg, #f7579e, #ed4384);
 	color: #fff;
+	font-family: 'Be Vietnam Pro', Arial, sans-serif;
 	font-weight: 800;
-	box-shadow: 0 6px 14px rgba(231, 76, 0, .35);
+	font-size: 15px;
+	letter-spacing: 0.5px;
+	/* Loại bỏ 300ms delay tap trên mobile */
+	touch-action: manipulation;
+	box-shadow:
+		0 6px 20px rgba(237, 67, 132, 0.45),
+		0 2px 6px rgba(0, 0, 0, 0.12);
+	cursor: pointer;
+	transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+	position: relative;
+	overflow: hidden;
+}
+
+/* Ripple layer khi hover */
+.spin-btn::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0);
+	transition: background 0.2s ease;
+}
+
+.spin-btn:not(:disabled):hover {
+	transform: translateY(-2px);
+	box-shadow:
+		0 10px 28px rgba(237, 67, 132, 0.5),
+		0 4px 10px rgba(0, 0, 0, 0.15);
+}
+
+.spin-btn:not(:disabled):hover::after {
+	background: rgba(255, 255, 255, 0.12);
+}
+
+.spin-btn:not(:disabled):active {
+	transform: translateY(0) scale(0.97);
+	box-shadow:
+		0 3px 10px rgba(237, 67, 132, 0.35),
+		0 1px 4px rgba(0, 0, 0, 0.1);
 }
 
 .spin-btn:disabled {
-	opacity: .6;
+	opacity: 0.6;
+	cursor: not-allowed;
+	transform: none;
+	box-shadow: none;
 }
 
-.game-page {
-	min-height: 100dvh;
-	background: #fde8ef;
-	padding-top: 30px;
-	padding-bottom: 80px !important;
+/* Trạng thái đang quay: thêm animation nhẹ để user biết đang xử lý */
+.spin-btn.is-spinning {
+	animation: spinBtnPulse 1.2s ease-in-out infinite;
 }
 
-@keyframes lightBlink {
-	from {
-		opacity: .45;
-		filter: brightness(.8);
+@keyframes spinBtnPulse {
+
+	0%,
+	100% {
+		opacity: 0.6;
 	}
 
-	to {
-		opacity: 1;
-		filter: brightness(1.8);
+	50% {
+		opacity: 0.85;
+	}
+}
+
+/* ─── Responsive: màn hình nhỏ hơn 360px ────────────────────────────────── */
+@media (max-width: 390px) {
+	.wheel-wrap {
+		max-width: calc(100vw - 32px);
+	}
+
+	.spin-btn {
+		width: 100%;
+		max-width: calc(100vw - 64px);
+		padding: 13px 20px;
+		font-size: 14px;
 	}
 }
 </style>
