@@ -542,7 +542,7 @@ const spinWheel = (forcedPrizeId = null) => {
            - Thêm is-spinning class cho animation pulse khi đang quay
            - hasSpun thì text đổi + tap lại hiện popup kết quả (xử lý trong spinWheel)
       -->
-						<button class="spin-btn" :class="{ 'is-spinning': isSpinning }" @click="spinWheel(3)"
+						<button class="spin-btn" :class="{ 'is-spinning': isSpinning }" @click="spinWheel(5)"
 							:disabled="isSpinning"
 							:aria-label="hasSpun ? 'Xem lại kết quả quay thưởng' : 'Quay vòng quay may mắn'">
 							{{ hasSpun ? 'XEM KẾT QUẢ' : isSpinning ? 'ĐANG QUAY...' : 'QUAY NGAY' }}
