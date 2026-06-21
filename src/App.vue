@@ -33,7 +33,7 @@ const wheelSize = ref(CANVAS_SIZE)   // responsive: tính lại theo viewport
 const prizes = [
 	{ id: 1, name: 'Xe ô tô điện', color: '#ffffff', image: '/img/xeoto.png', imageSize: 100, rotate: 0 },
 	{ id: 2, name: 'Chúc bạn may mắn lần sau', color: '#ec407a' },
-	{ id: 3, name: 'Xe Scooter', color: '#ffffff', image: '/img/scooter.png', imageSize: 65, rotate: 0 },
+	{ id: 3, name: 'Xe chòi chân', color: '#ffffff', image: '/img/xc.png', imageSize: 100, rotate: 0 },
 	{ id: 4, name: 'Chúc bạn may mắn lần sau', color: '#ec407a' },
 	{ id: 5, name: 'Xe đạp', color: '#ffffff', image: '/img/xedap.png', imageSize: 100, rotate: 75 },
 	{ id: 6, name: 'Chúc bạn may mắn lần sau', color: '#ec407a' },
@@ -334,6 +334,21 @@ const handleCanvasClick = (event) => {
 	if (dist <= 42) openSpunPopup()
 }
 
+// ─── Get Prize ID from Route ──────────────────────────────────────────────────
+const routeToPrizeIdMap = {
+	'/spin-wheel110': 1,        // Xe ô tô
+	'/spin-wheel111': 3,       // Xe chòi chân
+	'/spin-wheel112': 5,   // Xe đạp
+	'/spin-wheel113': 7,   // Voucher
+	// Thêm route khác tùy ý
+}
+
+const getPrizeIdFromRoute = () => {
+	if (typeof window === 'undefined') return null
+	const pathname = window.location.pathname
+	return routeToPrizeIdMap[pathname] || null
+}
+
 // ─── Spin ─────────────────────────────────────────────────────────────────────
 const spinWheel = (forcedPrizeId = null) => {
 	if (isSpinning.value) return
@@ -542,7 +557,7 @@ const spinWheel = (forcedPrizeId = null) => {
            - Thêm is-spinning class cho animation pulse khi đang quay
            - hasSpun thì text đổi + tap lại hiện popup kết quả (xử lý trong spinWheel)
       -->
-						<button class="spin-btn" :class="{ 'is-spinning': isSpinning }" @click="spinWheel(5)"
+					<button class="spin-btn" :class="{ 'is-spinning': isSpinning }" @click="spinWheel(getPrizeIdFromRoute())"
 							:disabled="isSpinning"
 							:aria-label="hasSpun ? 'Xem lại kết quả quay thưởng' : 'Quay vòng quay may mắn'">
 							{{ hasSpun ? 'XEM KẾT QUẢ' : isSpinning ? 'ĐANG QUAY...' : 'QUAY NGAY' }}
